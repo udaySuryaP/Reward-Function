@@ -1,71 +1,56 @@
 import math
 
 def reward_function(params):
-    MAX_REWARD = 1e3
+    MAX_REWARD = 1e6
     MIN_REWARD = 1e-3
-    DIRECTION_THRESHOLD = 10.0  # Reduced threshold for steering direction
-    ABS_STEERING_THRESHOLD = 20  # Reduced threshold for steering angle
+    DIRECTION_THRESHOLD = 10.0
+    ABS_STEERING_THRESHOLD = 20
+    THROTTLE_ADJUSTMENT = 0.5
+    TARGET_SPEED = 25.0
+    TRACK_WIDTH = params['track_width']
 
     on_track = params['all_wheels_on_track']
     distance_from_center = params['distance_from_center']
-    track_width = params['track_width']
     steering = abs(params['steering_angle'])
     speed = params['speed']
-    waypoints = params['waypoints']
-    closest_waypoints = params['closest_waypoints']
     heading = params['heading']
 
     # Negative exponential penalty based on distance from center
-    reward = math.exp(-5 * distance_from_center)  # Increased penalty coefficient
+    reward = math.exp(-10 * distance_from_center)
 
     # Penalty for going off track
     if not on_track:
-        return float(MIN_REWARD)
+        return float(MIN_REWARD * distance_from_center / TRACK_WIDTH)
 
-    # Calculate distance from the center line
-    marker_1 = 0.3 * track_width  # Adjusted markers
-    marker_2 = 0.6 * track_width
-    marker_3 = 0.9 * track_width
-
-    # Give higher reward if the car is closer to the center line
-    if distance_from_center <= marker_1:
-        reward *= 1.2
-    elif distance_from_center <= marker_2:
-        reward *= 0.8
-    elif distance_from_center <= marker_3:
-        reward += 0.2
+    # Adjust throttle based on steering angle
+    if speed > TARGET_SPEED - (THROTTLE_ADJUSTMENT * abs(steering)):
+        reward *= 1.5  # Encourage higher speed
 
     # Penalty for excessive steering
-    if abs(steering) > ABS_STEERING_THRESHOLD:
-        reward *= 0.5  # Increased penalty
+    if steering > ABS_STEERING_THRESHOLD:
+        reward *= 0.5  # Reduce reward for high steering angles
 
     # Penalty for not driving straight
-    if abs(steering) > 5.0:
-        reward *= 0.7  # Increased penalty
+    if steering > 5.0:
+        reward *= 0.8  # Reduce reward for slight steering deviations
 
     # Penalty for not driving fast
-    if speed < 4.0:
-        reward *= 0.5  # Increased penalty
+    if speed < 20.0:
+        reward *= 0.6  # Encourage faster speed
 
-    # Calculate the direction of the center line based on the closest waypoints
-    closest_waypoint_1 = int(closest_waypoints[0])
-    closest_waypoint_2 = int(closest_waypoints[1])
-
-    next_point = waypoints[closest_waypoint_2]
-    prev_point = waypoints[closest_waypoint_1]
-    direction = math.atan2(next_point[1] - prev_point[1], next_point[0] - prev_point[0])
-    direction = math.degrees(direction)
-    direction_diff = abs(direction - heading)
+    # Calculate the direction of the center line based on heading
+    # You may need to adjust this depending on your waypoint format
+    waypoint_heading = math.degrees(
+        math.atan2(
+            params['waypoints'][1][1] - params['waypoints'][0][1],
+            params['waypoints'][1][0] - params['waypoints'][0][0],
+        )
+    )
+    direction_diff = abs(waypoint_heading - heading)
 
     # Penalty for not heading in the right direction
     if direction_diff > DIRECTION_THRESHOLD:
-        reward *= 0.5  # Increased penalty
-
-    # Adjust throttle based on steering angle
-    throttle_adjustment = 0.1  # Reduced throttle adjustment
-    target_speed = 10.0  # Increased target speed
-    if speed > target_speed - (throttle_adjustment * abs(steering)):
-        reward *= 0.8  # Reduced penalty
+        reward *= 0.5  # Reduce reward for not following waypoints closely
 
     # Cap the reward to avoid excessive values
     return max(MIN_REWARD, min(MAX_REWARD, float(reward)))
